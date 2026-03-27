@@ -220,9 +220,9 @@ static Token lex_token(SExprParseOptions * opts) {
 	{
 		errno = 0;
 		long i = strtol(blob, &end, 10);
-		if (errno == 0 && end == blob + bsize) {
+		if (end == blob + bsize) {
 			free_buffer(opts->allocator, blob, bcap);
-			if (i > INT_MAX) {
+			if (errno || i > INT_MAX) {
 				return token_err(SEXPR_PARSE_OVERFLOW);
 			}
 			Token t = token(T_INT);
@@ -233,8 +233,10 @@ static Token lex_token(SExprParseOptions * opts) {
 	{
 		errno = 0;
 		double d = strtod(blob, &end);
-		if (errno == 0 && end == blob + bsize) {
+		if (end == blob + bsize) {
 			free_buffer(opts->allocator, blob, bcap);
+			if (errno)
+				return token_err(SEXPR_PARSE_OVERFLOW);
 			Token t = token(T_FLOAT);
 			t.as.f = d;
 			return t;
@@ -334,14 +336,14 @@ SExprParseResult parse_sexpr(SExprParseOptions * opts, size_t level, Token t, SE
 	return SEXPR_PARSE_OK;
 }
 
-SExprParseResult sexpr_parse(SExprParseOptions opts, SExpr * out) {
-	if (opts.allocator.vtable == NULL)
-		opts.allocator = sexpr_default_allocator();
-	if (opts.stream.vtable == NULL)
-		opts.stream = sexpr_FILE_stream(stdout);
-	if (opts.lex_str == NULL)
-		opts.lex_str = lex_str;
-	return parse_sexpr(&opts, 0, lex_token(&opts), out);
+SExprParseResult sexpr_parse(SExprParseOptions * opts, SExpr * out) {
+	if (opts->allocator.vtable == NULL)
+		opts->allocator = sexpr_default_allocator();
+	if (opts->stream.vtable == NULL)
+		opts->stream = sexpr_FILE_stream(stdout);
+	if (opts->lex_str == NULL)
+		opts->lex_str = lex_str;
+	return parse_sexpr(opts, 0, lex_token(opts), out);
 }
 
 static char * realloc8(void * _, char * in, size_t _2, size_t size) {
@@ -400,14 +402,9 @@ static int buffer_stream_next(void * ctx) {
 	return c;
 }
 
-static int buffer_stream_err(void * _) {
-	return 0;
-}
-
 const static SExprStreamVTable buffer_stream_vtable = {
 	buffer_stream_peek,
 	buffer_stream_next,
-	buffer_stream_err,
 };
 
 SExprStream sexpr_buffer_stream(SExprBuffer * buffer) {
@@ -427,14 +424,9 @@ static int FILE_stream_next(void * ctx) {
 	return fgetc(ctx);
 }
 
-static int FILE_stream_err(void * ctx) {
-	return ferror(ctx);
-}
-
 static const SExprStreamVTable FILE_stream_vtable = {
 	FILE_stream_peek,
 	FILE_stream_next,
-	FILE_stream_err,
 };
 
 SExprStream sexpr_FILE_stream(FILE * file) {

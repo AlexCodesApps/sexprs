@@ -7,7 +7,7 @@ build/sexprs.o: build/tests sexprs.c sexprs.h
 	mkdir -p build
 	cc -c sexprs.c -o build/sexprs.o -std=c99 ${CFLAGS} ${LDFLAGS}
 
-build/tests: tests.c
+build/tests: tests.c sexprs.c sexprs.h
 	mkdir -p build
 	cc tests.c sexprs.c -o build/tests -std=c99 ${CFLAGS} ${LDFLAGS}
 	./build/tests

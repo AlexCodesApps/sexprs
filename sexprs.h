@@ -86,7 +86,7 @@ static inline SExprType sexpr_type(SExpr expr) {
 	if ((expr.inner & SEXPR_QNAN) != SEXPR_QNAN) {
 		return SEXPR_FLOAT;
 	}
-	if (expr.inner & SEXPR_SIGNBIT) { // Boxed
+	if (expr.inner & SEXPR_SIGNBIT) { /* Boxed */
 		return (SExprType)(expr.inner & 0x7);
 	}
 	if (expr.inner & (1ULL << 49)) {
@@ -96,7 +96,8 @@ static inline SExprType sexpr_type(SExpr expr) {
 }
 
 typedef struct {
-	char * (*realloc_buffer)(void * ctx, char * buffer, size_t oldsize, size_t newsize);
+	char * (*realloc_buffer)(void * ctx, char * buffer,
+								size_t oldsize, size_t newsize);
 	char * (*allocate_string)(void * ctx, char *);
 	char * (*allocate_symbol)(void * ctx, char *);
 	SExprCons * (*allocate_cons)(void * ctx, SExprCons);
@@ -106,7 +107,7 @@ typedef struct {
 } SExprAllocatorVTable;
 
 typedef struct {
-	// must always be aligned to 8 bytes
+	/* must always be aligned to 8 bytes */
 	void * ctx;
 	const SExprAllocatorVTable * vtable;
 } SExprAllocator;
@@ -114,7 +115,6 @@ typedef struct {
 typedef struct {
 	int (*peek)(void * ctx);
 	int (*next)(void * ctx);
-	int (*err)(void * ctx);
 } SExprStreamVTable;
 
 typedef struct {
@@ -133,11 +133,10 @@ typedef enum {
 	SEXPR_PARSE_OOM,
 } SExprParseResult;
 
-
 typedef struct SExprParseOptions {
 	SExprAllocator allocator;
 	SExprStream stream;
-	SExprParseResult (* lex_str)(struct SExprParseOptions * opts, char ** out);
+	SExprParseResult (*lex_str)(struct SExprParseOptions * opts, char ** out);
 	const char * nil_keyword;
 	size_t nest_limit;
 } SExprParseOptions;
@@ -152,8 +151,8 @@ SExprStream sexpr_buffer_stream(SExprBuffer * buffer);
 SExprStream sexpr_FILE_stream(FILE * file);
 
 /* PRE: LC_NUMERIC must be set to "C" or "POSIX" */
-SExprParseResult sexpr_parse(SExprParseOptions opts, SExpr * out);
+SExprParseResult sexpr_parse(SExprParseOptions * opts, SExpr * out);
 
 void sexpr_free(SExpr expr, SExprAllocator alloc);
 
-#endif // SEXPRS_H
+#endif /* SEXPRS_H */

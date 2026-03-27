@@ -39,9 +39,8 @@ void test_no_crash(void) {
 	buf.ptr = test;
 	buf.nleft = strlen(test);
 	opts.stream = sexpr_buffer_stream(&buf);
-	opts.allocator = sexpr_default_allocator();
 	SExpr expr;
-	SExprParseResult r = sexpr_parse(opts, &expr);
+	SExprParseResult r = sexpr_parse(&opts, &expr);
 	assert(r == SEXPR_PARSE_OK);
 	assert(sexpr_type(expr) == SEXPR_CONS);
 	SExprCons * cons = sexpr_as_cons(expr);
