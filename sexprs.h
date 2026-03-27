@@ -1,6 +1,7 @@
 #ifndef SEXPRS_H
 #define SEXPRS_H
 
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <stddef.h>
@@ -35,7 +36,7 @@ static inline double sexpr_as_float(SExpr expr) {
 }
 
 static inline void * sexpr_as_boxed(SExpr expr) {
-	return (void *)((uintptr_t)expr.inner & ~(uintptr_t)(SEXPR_SIGNBIT | SEXPR_QNAN | 0xFFF));
+	return (void *)((uintptr_t)expr.inner & ~(uintptr_t)(SEXPR_SIGNBIT | SEXPR_QNAN | 0x7));
 }
 
 static inline char * sexpr_as_string(SExpr expr) {
@@ -65,6 +66,7 @@ static inline SExpr int_as_sexpr(int i) {
 }
 
 static inline SExpr boxed_as_sexpr(void * boxed, SExprType type) {
+	assert(((uintptr_t)boxed & 0x7) == 0);
 	return (SExpr){ (uint64_t)(uintptr_t)boxed | (SEXPR_SIGNBIT | SEXPR_QNAN) | type };
 }
 
@@ -85,7 +87,7 @@ static inline SExprType sexpr_type(SExpr expr) {
 		return SEXPR_FLOAT;
 	}
 	if (expr.inner & SEXPR_SIGNBIT) { // Boxed
-		return (SExprType)(expr.inner & 0xFFF);
+		return (SExprType)(expr.inner & 0x7);
 	}
 	if (expr.inner & (1ULL << 49)) {
 		return SEXPR_INT;
@@ -110,15 +112,24 @@ typedef struct {
 } SExprAllocator;
 
 typedef struct {
+	int (*peek)(void * ctx);
+	int (*next)(void * ctx);
+	int (*err)(void * ctx);
+} SExprStreamVTable;
+
+typedef struct {
 	void * ctx;
-	ptrdiff_t (*read)(void * ctx, void * out, ptrdiff_t size);
+	const SExprStreamVTable * vtable;
 } SExprStream;
 
 typedef enum {
 	SEXPR_PARSE_OK,
 	SEXPR_PARSE_UNEXPECTED_CHAR,
 	SEXPR_PARSE_UNEXPECTED_TOKEN,
+	SEXPR_PARSE_UNEXPECTED_EOF,
+	SEXPR_UNTERM_STRING,
 	SEXPR_PARSE_OVERFLOW,
+	SEXPR_PARSE_NEST_LIMIT_EXCEEDED,
 	SEXPR_PARSE_OOM,
 } SExprParseResult;
 
@@ -126,10 +137,9 @@ typedef enum {
 typedef struct SExprParseOptions {
 	SExprAllocator allocator;
 	SExprStream stream;
-	int (* is_token_c)(char c);
 	SExprParseResult (* lex_str)(struct SExprParseOptions * opts, char ** out);
 	const char * nil_keyword;
-	int nest_limit;
+	size_t nest_limit;
 } SExprParseOptions;
 
 typedef struct {
@@ -141,6 +151,9 @@ SExprAllocator sexpr_default_allocator(void);
 SExprStream sexpr_buffer_stream(SExprBuffer * buffer);
 SExprStream sexpr_FILE_stream(FILE * file);
 
+/* PRE: LC_NUMERIC must be set to "C" or "POSIX" */
 SExprParseResult sexpr_parse(SExprParseOptions opts, SExpr * out);
+
+void sexpr_free(SExpr expr, SExprAllocator alloc);
 
 #endif // SEXPRS_H
