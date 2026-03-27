@@ -54,6 +54,7 @@ static int lex_ws(SExprStream s) {
 		case ';':
 			while ((c = peek(s)) != EOF && c != '\n')
 				next(s);
+			continue;
 		case ' ':
 		case '\n':
 		case '\r':
@@ -88,10 +89,13 @@ static SExprParseResult lex_str(SExprParseOptions * opts, char ** out) {
 			switch (peek(stream)) {
 			case 'n':
 				c = '\n';
+				break;
 			case '\t':
 				c = '\t';
+				break;
 			case '\r':
 				c = '\r';
+				break;
 			default:
 				realloc_buffer(opts->allocator, buffer, cap, 0);
 				return SEXPR_PARSE_UNEXPECTED_CHAR;
@@ -338,10 +342,6 @@ SExprParseResult sexpr_parse(SExprParseOptions opts, SExpr * out) {
 	if (opts.lex_str == NULL)
 		opts.lex_str = lex_str;
 	return parse_sexpr(&opts, 0, lex_token(&opts), out);
-}
-
-static void * malloc8(void * _, size_t size) {
-	return malloc(size);
 }
 
 static char * realloc8(void * _, char * in, size_t _2, size_t size) {

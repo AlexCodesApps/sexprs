@@ -33,7 +33,7 @@ void test_tag(void) {
 }
 
 void test_no_crash(void) {
-	const char * test = "(+ 12 (* 4.0 \"5 fjl \nf\"))";
+	const char * test = "(+ 12 (123.0* 4.0 \"5 fjl \nf\"))";
 	SExprParseOptions opts = {0};
 	SExprBuffer buf;
 	buf.ptr = test;
@@ -58,7 +58,7 @@ void test_no_crash(void) {
 	cons = sexpr_as_cons(cons->car);
 	assert(sexpr_type(cons->car) == SEXPR_SYMBOL);
 	assert(sexpr_type(cons->cdr) == SEXPR_CONS);
-	assert(strcmp(sexpr_as_symbol(cons->car), "*") == 0);
+	assert(strcmp(sexpr_as_symbol(cons->car), "123.0*") == 0);
 	cons = sexpr_as_cons(cons->cdr);
 	assert(sexpr_type(cons->car) == SEXPR_FLOAT);
 	assert(sexpr_type(cons->cdr) == SEXPR_CONS);
