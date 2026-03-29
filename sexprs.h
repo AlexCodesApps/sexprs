@@ -16,6 +16,8 @@ typedef enum {
 	SEXPR_FLOAT,
 } SExprType;
 
+#ifndef SEXPR_DISABLE_NAN_BOXING
+
 typedef struct {
 	uint64_t inner;
 } SExpr;
@@ -25,9 +27,11 @@ typedef struct {
 	SExpr cdr;
 } SExprCons;
 
+
 #define NIL_SEXPR ((SExpr){ SEXPR_QNAN })
 #define SEXPR_QNAN ((uint64_t)0x7ffc000000000000)
 #define SEXPR_SIGNBIT ((uint64_t)0x8000000000000000)
+
 
 static inline double sexpr_as_float(SExpr expr) {
 	double out;
@@ -66,7 +70,6 @@ static inline SExpr int_as_sexpr(int i) {
 }
 
 static inline SExpr boxed_as_sexpr(void * boxed, SExprType type) {
-	assert(((uintptr_t)boxed & 0x7) == 0);
 	return (SExpr){ (uint64_t)(uintptr_t)boxed | (SEXPR_SIGNBIT | SEXPR_QNAN) | type };
 }
 
@@ -95,11 +98,92 @@ static inline SExprType sexpr_type(SExpr expr) {
 	return SEXPR_NIL;
 }
 
+#else
+
+typedef struct {
+	SExprType type;
+	union {
+		int i;
+		double f;
+		void * b;
+	} as;
+} SExpr;
+
+typedef struct {
+	SExpr car;
+	SExpr cdr;
+} SExprCons;
+
+#define NIL_SEXPR ((SExpr){ SEXPR_NIL })
+
+static inline double sexpr_as_float(SExpr expr) {
+	return expr.as.f;
+}
+
+static inline void * sexpr_as_boxed(SExpr expr) {
+	return expr.as.b;
+}
+
+static inline char * sexpr_as_string(SExpr expr) {
+	return (char *)expr.as.b;
+}
+
+static inline char * sexpr_as_symbol(SExpr expr) {
+	return (char *)expr.as.b;
+}
+
+static inline SExprCons * sexpr_as_cons(SExpr expr) {
+	return (SExprCons *)expr.as.b;
+}
+
+static inline int sexpr_as_int(SExpr expr) {
+	return expr.as.i;
+}
+
+static inline SExpr float_as_sexpr(double f) {
+	SExpr expr;
+	expr.type = SEXPR_FLOAT;
+	expr.as.f = f;
+	return expr;
+}
+
+static inline SExpr int_as_sexpr(int i) {
+	SExpr expr;
+	expr.type = SEXPR_INT;
+	expr.as.i = i;
+	return expr;
+}
+
+static inline SExpr boxed_as_sexpr(void * boxed, SExprType type) {
+	SExpr expr;
+	expr.type = type;
+	expr.as.b = boxed;
+	return expr;
+}
+
+static inline SExpr string_as_sexpr(char * str) {
+	return boxed_as_sexpr(str, SEXPR_STRING);
+}
+
+static inline SExpr symbol_as_sexpr(char * sym) {
+	return boxed_as_sexpr(sym, SEXPR_SYMBOL);
+}
+
+static inline SExpr cons_as_sexpr(SExprCons * cons) {
+	return boxed_as_sexpr(cons, SEXPR_CONS);
+}
+
+static inline SExprType sexpr_type(SExpr expr) {
+	return expr.type;
+}
+
+#endif /* SEXPR_DISABLE_NAN_BOXING */
+
 typedef struct {
 	char * (*realloc_buffer)(void * ctx, char * buffer,
 								size_t oldsize, size_t newsize);
-	char * (*allocate_string)(void * ctx, char *);
-	char * (*allocate_symbol)(void * ctx, char *);
+	char * (*buffer_to_string)(void * ctx, char *);
+	char * (*buffer_to_symbol)(void * ctx, char *);
 	SExprCons * (*allocate_cons)(void * ctx, SExprCons);
 	void (*free_string)(void * ctx, char *);
 	void (*free_symbol)(void * ctx, char *);

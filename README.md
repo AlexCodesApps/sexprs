@@ -25,6 +25,15 @@ I wanted to test how easy it was to write an s-expr parser.
     sexpr_free(expr, opts.allocator);
 ```
 
+## NAN Boxing
+- SExprs are NAN-boxed to fit into a 64-bit integer and potentially rely on pointers from ``malloc`` being 8-byte aligned.
+- This functionality relies on non-portable behavior.
+- To disable this functionality, run manually,
+    ```sh
+    cc -c sexprs.c -o <destination path> -DSEXPR_DISABLE_NAN_BOXING
+    ar crs <destination archive path> <destination path> # To build an archive
+    ```
+
 ## Using SExprs
 ```C
 /* Discriminate SExpr */
@@ -52,6 +61,7 @@ SExpr boxed_as_sexpr(void * boxed, SExprType type);
 SExpr string_as_sexpr(char * str);
 SExpr symbol_as_sexpr(char * sym);
 SExpr cons_as_sexpr(SExprCons * cons);
+NIL_SEXPR; /* Constant */
 ```
 
 ## Parse Options
@@ -81,36 +91,6 @@ typedef struct SExprParseOptions {
 
 
 SExprParseResult sexpr_parse(SExprParseOptions * opts, SExpr * out);
-```
-
-### Allocator
-The ``realloc_buffer`` and ``allocate_cons`` are intended allocate without any
-surprising behavior, but the ``allocate_string`` and ``allocate_symbol`` are
-functions that take in a buffer allocated with ``realloc_buffer``
-and potentially do nothing, but could also do interning and the like.
-The ``free_*`` functions don't have any tricks. They don't take a length
-parameter as the lengths are statically known or request-able with ``strlen``.
-```C
-typedef struct {
-	/* must always be aligned to 8 bytes */
-	void * ctx;
-	const SExprAllocatorVTable * vtable;
-} SExprAllocator;
-
-
-typedef struct {
-	char * (*realloc_buffer)(void * ctx, char * buffer,
-                                size_t oldsize, size_t newsize);
-	char * (*allocate_string)(void * ctx, char *);
-	char * (*allocate_symbol)(void * ctx, char *);
-	SExprCons * (*allocate_cons)(void * ctx, SExprCons);
-	void (*free_string)(void * ctx, char *);
-	void (*free_symbol)(void * ctx, char *);
-	void (*free_cons)(void * ctx, SExprCons *);
-} SExprAllocatorVTable;
-
-
-SExprAllocator sexpr_default_allocator(void);
 ```
 
 ### Stream

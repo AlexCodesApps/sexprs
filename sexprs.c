@@ -78,9 +78,10 @@ static void free_buffer(SExprAllocator alloc, void * buf, size_t old) {
 
 static SExprParseResult lex_str(SExprParseOptions * opts, char ** out) {
 	SExprStream stream = opts->stream;
+	SExprAllocator alloc = opts->allocator;
 	size_t size = 0;
 	size_t cap = 4;
-	char * buffer = realloc_buffer(opts->allocator, NULL, 0, cap);
+	char * buffer = realloc_buffer(alloc, NULL, 0, cap);
 	next(stream);
 	char c;
 	while ((c = peek(stream)) != '"' && c != EOF) {
@@ -97,16 +98,16 @@ static SExprParseResult lex_str(SExprParseOptions * opts, char ** out) {
 				c = '\r';
 				break;
 			default:
-				realloc_buffer(opts->allocator, buffer, cap, 0);
+				realloc_buffer(alloc, buffer, cap, 0);
 				return SEXPR_PARSE_UNEXPECTED_CHAR;
 			}
 			next(stream);
 		}
 		if (size == cap - 1) {
 			size_t ncap = cap * 2;
-			char * nbuffer = realloc_buffer(opts->allocator, buffer, cap, ncap);
+			char * nbuffer = realloc_buffer(alloc, buffer, cap, ncap);
 			if (!nbuffer) {
-				realloc_buffer(opts->allocator, buffer, cap, 0);
+				realloc_buffer(alloc, buffer, cap, 0);
 				return SEXPR_PARSE_OOM;
 			}
 			buffer = nbuffer;
@@ -115,14 +116,14 @@ static SExprParseResult lex_str(SExprParseOptions * opts, char ** out) {
 		buffer[size++] = c;
 	}
 	if (c == EOF) {
-		realloc_buffer(opts->allocator, buffer, cap, 0);
+		realloc_buffer(alloc, buffer, cap, 0);
 		return SEXPR_UNTERM_STRING;
 	}
 	next(stream);
 	buffer[size] = '\0';
-	char * str = opts->allocator.vtable->allocate_string(opts->allocator.ctx, buffer);
+	char * str = alloc.vtable->buffer_to_string(alloc.ctx, buffer);
 	if (!str) {
-		realloc_buffer(opts->allocator, buffer, cap, 0);
+		realloc_buffer(alloc, buffer, cap, 0);
 		return SEXPR_PARSE_OOM;
 	}
 	*out = str;
@@ -140,7 +141,7 @@ bool xisdigit(int c) {
 
 #define MAX_DOUBLE_DIGITS (3 + DBL_MANT_DIG - DBL_MIN_EXP)
 
-int xis_not_blob(char c) {
+int xis_not_part_of_sym(char c) {
 	switch (c) {
 	case ' ':
 	case '\t':
@@ -157,26 +158,27 @@ int xis_not_blob(char c) {
 	}
 }
 
-static SExprParseResult lex_blob(SExprParseOptions * opts, char ** out, size_t * out_size, size_t * out_cap) {
+static SExprParseResult lex_sym_or_number(SExprParseOptions * opts, char ** out, size_t * out_size, size_t * out_cap) {
 	SExprStream s = opts->stream;
+	SExprAllocator alloc = opts->allocator;
 	size_t size = 0;
 	size_t cap = 4;
-	char * buff = realloc_buffer(opts->allocator, NULL, 0, cap);
+	char * buff = realloc_buffer(alloc, NULL, 0, cap);
 	if (!buff)
 		return SEXPR_PARSE_OOM;
 	do {
 		if (size == cap - 1) {
 			size_t new_cap = cap * 2;
-			char * nbuff = realloc_buffer(opts->allocator, buff, cap, new_cap);
+			char * nbuff = realloc_buffer(alloc, buff, cap, new_cap);
 			if (!nbuff) {
-				realloc_buffer(opts->allocator, buff, cap, 0);
+				realloc_buffer(alloc, buff, cap, 0);
 				return SEXPR_PARSE_OOM;
 			}
 			cap = new_cap;
 			buff = nbuff;
 		}
 		buff[size++] = next(s);
-	} while (!xis_not_blob(peek(s)));
+	} while (!xis_not_part_of_sym(peek(s)));
 	buff[size] = '\0';
 	*out = buff;
 	*out_size = size;
@@ -186,6 +188,7 @@ static SExprParseResult lex_blob(SExprParseOptions * opts, char ** out, size_t *
 
 static Token lex_token(SExprParseOptions * opts) {
 	SExprStream s = opts->stream;
+	SExprAllocator alloc = opts->allocator;
 	int c = lex_ws(s);
 	if (c == EOF) {
 		next(s);
@@ -211,17 +214,19 @@ static Token lex_token(SExprParseOptions * opts) {
 	char * blob;
 	size_t bsize;
 	size_t bcap;
-	SExprParseResult r = lex_blob(opts, &blob, &bsize, &bcap);
+	SExprParseResult r = lex_sym_or_number(opts, &blob, &bsize, &bcap);
 	if (r != SEXPR_PARSE_OK)
 		return token_err(r);
-	if (opts->nil_keyword && strcmp(opts->nil_keyword, blob) == 0)
+	if (opts->nil_keyword && strcmp(opts->nil_keyword, blob) == 0) {
+		free_buffer(alloc, blob, bcap);
 		return token(T_NIL);
+	}
 	char * end;
 	{
 		errno = 0;
 		long i = strtol(blob, &end, 10);
 		if (end == blob + bsize) {
-			free_buffer(opts->allocator, blob, bcap);
+			free_buffer(alloc, blob, bcap);
 			if (errno || i > INT_MAX) {
 				return token_err(SEXPR_PARSE_OVERFLOW);
 			}
@@ -234,7 +239,7 @@ static Token lex_token(SExprParseOptions * opts) {
 		errno = 0;
 		double d = strtod(blob, &end);
 		if (end == blob + bsize) {
-			free_buffer(opts->allocator, blob, bcap);
+			free_buffer(alloc, blob, bcap);
 			if (errno)
 				return token_err(SEXPR_PARSE_OVERFLOW);
 			Token t = token(T_FLOAT);
@@ -242,9 +247,9 @@ static Token lex_token(SExprParseOptions * opts) {
 			return t;
 		}
 	}
-	char * sym = opts->allocator.vtable->allocate_symbol(opts->allocator.ctx, blob);
+	char * sym = alloc.vtable->buffer_to_symbol(alloc.ctx, blob);
 	if (!sym) {
-		free_buffer(opts->allocator, blob, bcap);
+		free_buffer(alloc, blob, bcap);
 		return token_err(SEXPR_PARSE_OOM);
 	}
 	Token t = token(T_SYM);
@@ -277,6 +282,7 @@ void sexpr_free(SExpr expr, SExprAllocator alloc) {
 SExprParseResult parse_sexpr(SExprParseOptions * opts, size_t level, Token t, SExpr * out);
 
 SExprParseResult parse_rest_of_list(SExprParseOptions * opts, size_t level, SExpr * out) {
+	SExprAllocator alloc = opts->allocator;
 	Token t = lex_token(opts);
 	if (t.type == T_RPAREN) {
 		*out = NIL_SEXPR;
@@ -288,17 +294,13 @@ SExprParseResult parse_rest_of_list(SExprParseOptions * opts, size_t level, SExp
 		return r;
 	r = parse_rest_of_list(opts, level, &cons.cdr);
 	if (r != SEXPR_PARSE_OK) {
-		sexpr_free(cons.car, opts->allocator);
+		sexpr_free(cons.car, alloc);
 		return r;
 	}
-	SExprCons * consp =
-		opts->allocator.vtable->allocate_cons(
-			opts->allocator.ctx,
-			cons
-		);
+	SExprCons * consp = alloc.vtable->allocate_cons(alloc.ctx, cons);
 	if (!consp) {
-		sexpr_free(cons.car, opts->allocator);
-		sexpr_free(cons.cdr, opts->allocator);
+		sexpr_free(cons.car, alloc);
+		sexpr_free(cons.cdr, alloc);
 		return SEXPR_PARSE_OOM;
 	}
 	*out = cons_as_sexpr(consp);
