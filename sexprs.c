@@ -1,18 +1,14 @@
 #include "sexprs.h"
 #include <assert.h>
-#include <limits.h>
 #include <errno.h>
 #include <float.h>
-#include <stdlib.h>
+#include <limits.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
-static int peek(SExprStream stream) {
-	return stream.vtable->peek(stream.ctx);
-}
+static int peek(SExprStream stream) { return stream.vtable->peek(stream.ctx); }
 
-static int next(SExprStream stream) {
-	return stream.vtable->next(stream.ctx);
-}
+static int next(SExprStream stream) { return stream.vtable->next(stream.ctx); }
 
 typedef enum {
 	T_LPAREN,
@@ -37,9 +33,7 @@ typedef struct {
 	} as;
 } Token;
 
-static Token token(TokenType t) {
-	return (Token) { t };
-}
+static Token token(TokenType t) { return (Token){t}; }
 
 static Token token_err(SExprParseResult r) {
 	Token t = token(T_ERR);
@@ -68,7 +62,8 @@ static int lex_ws(SExprStream s) {
 	return c;
 }
 
-static char * realloc_buffer(SExprAllocator alloc, void * buf, size_t old, size_t new) {
+static char * realloc_buffer(SExprAllocator alloc, void * buf, size_t old,
+							 size_t new) {
 	return alloc.vtable->realloc_buffer(alloc.ctx, buf, old, new);
 }
 
@@ -135,9 +130,7 @@ typedef struct {
 	size_t nest_level;
 } ParserState;
 
-bool xisdigit(int c) {
-	return '0' <= c && c <= '9';
-}
+bool xisdigit(int c) { return '0' <= c && c <= '9'; }
 
 #define MAX_DOUBLE_DIGITS (3 + DBL_MANT_DIG - DBL_MIN_EXP)
 
@@ -158,7 +151,8 @@ int xis_not_part_of_sym(char c) {
 	}
 }
 
-static SExprParseResult lex_sym_or_number(SExprParseOptions * opts, char ** out, size_t * out_size, size_t * out_cap) {
+static SExprParseResult lex_sym_or_number(SExprParseOptions * opts, char ** out,
+										  size_t * out_size, size_t * out_cap) {
 	SExprStream s = opts->stream;
 	SExprAllocator alloc = opts->allocator;
 	size_t size = 0;
@@ -259,29 +253,31 @@ static Token lex_token(SExprParseOptions * opts) {
 
 void sexpr_free(SExpr expr, SExprAllocator alloc) {
 	switch (sexpr_type(expr)) {
-		case SEXPR_NIL:
-		case SEXPR_INT:
-		case SEXPR_FLOAT:
-			break;
-		case SEXPR_STRING:
-			alloc.vtable->free_string(alloc.ctx, sexpr_as_string(expr));
-			break;
-		case SEXPR_CONS: {
-			SExprCons * cons = sexpr_as_cons(expr);
-			sexpr_free(cons->car, alloc);
-			sexpr_free(cons->cdr, alloc);
-			alloc.vtable->free_cons(alloc.ctx, sexpr_as_cons(expr));
-			break;
-		}
-		case SEXPR_SYMBOL:
-			alloc.vtable->free_symbol(alloc.ctx, sexpr_as_symbol(expr));
-			break;
+	case SEXPR_NIL:
+	case SEXPR_INT:
+	case SEXPR_FLOAT:
+		break;
+	case SEXPR_STRING:
+		alloc.vtable->free_string(alloc.ctx, sexpr_as_string(expr));
+		break;
+	case SEXPR_CONS: {
+		SExprCons * cons = sexpr_as_cons(expr);
+		sexpr_free(cons->car, alloc);
+		sexpr_free(cons->cdr, alloc);
+		alloc.vtable->free_cons(alloc.ctx, sexpr_as_cons(expr));
+		break;
+	}
+	case SEXPR_SYMBOL:
+		alloc.vtable->free_symbol(alloc.ctx, sexpr_as_symbol(expr));
+		break;
 	}
 }
 
-SExprParseResult parse_sexpr(SExprParseOptions * opts, size_t level, Token t, SExpr * out);
+SExprParseResult parse_sexpr(SExprParseOptions * opts, size_t level, Token t,
+							 SExpr * out);
 
-SExprParseResult parse_rest_of_list(SExprParseOptions * opts, size_t level, SExpr * out) {
+SExprParseResult parse_rest_of_list(SExprParseOptions * opts, size_t level,
+									SExpr * out) {
 	SExprAllocator alloc = opts->allocator;
 	Token t = lex_token(opts);
 	if (t.type == T_RPAREN) {
@@ -307,33 +303,34 @@ SExprParseResult parse_rest_of_list(SExprParseOptions * opts, size_t level, SExp
 	return SEXPR_PARSE_OK;
 }
 
-SExprParseResult parse_sexpr(SExprParseOptions * opts, size_t level, Token t, SExpr * out) {
+SExprParseResult parse_sexpr(SExprParseOptions * opts, size_t level, Token t,
+							 SExpr * out) {
 	if (opts->nest_limit && level >= opts->nest_limit)
 		return SEXPR_PARSE_NEST_LIMIT_EXCEEDED;
 	switch (t.type) {
-		case T_LPAREN:
-			return parse_rest_of_list(opts, level + 1, out);
-		case T_RPAREN:
-			return SEXPR_PARSE_UNEXPECTED_TOKEN;
-		case T_INT:
-			*out = int_as_sexpr(t.as.i);
-			break;
-		case T_FLOAT:
-			*out = float_as_sexpr(t.as.f);
-			break;
-		case T_SYM:
-			*out = symbol_as_sexpr(t.as.sym);
-			break;
-		case T_STR:
-			*out = string_as_sexpr(t.as.str);
-			break;
-		case T_NIL:
-			*out = NIL_SEXPR;
-			break;
-		case T_EOF:
-			return SEXPR_PARSE_UNEXPECTED_EOF;
-		case T_ERR:
-			return t.as.err;
+	case T_LPAREN:
+		return parse_rest_of_list(opts, level + 1, out);
+	case T_RPAREN:
+		return SEXPR_PARSE_UNEXPECTED_TOKEN;
+	case T_INT:
+		*out = int_as_sexpr(t.as.i);
+		break;
+	case T_FLOAT:
+		*out = float_as_sexpr(t.as.f);
+		break;
+	case T_SYM:
+		*out = symbol_as_sexpr(t.as.sym);
+		break;
+	case T_STR:
+		*out = string_as_sexpr(t.as.str);
+		break;
+	case T_NIL:
+		*out = NIL_SEXPR;
+		break;
+	case T_EOF:
+		return SEXPR_PARSE_UNEXPECTED_EOF;
+	case T_ERR:
+		return t.as.err;
 	}
 	return SEXPR_PARSE_OK;
 }
@@ -352,43 +349,28 @@ static char * realloc8(void * _, char * in, size_t _2, size_t size) {
 	return realloc(in, size);
 }
 
-static char * strdup8(void * ctx, char * in) {
-	return in;
-}
+static char * return_str(void * ctx, char * in) { return in; }
 
 static SExprCons * malloc_cons8(void * ctx, SExprCons cons) {
 	SExprCons * out = malloc(sizeof(SExprCons));
-	if (!out) return out;
+	if (!out)
+		return out;
 	*out = cons;
 	return out;
 }
 
-static void free_str(void * _, char * str) {
-	free(str);
-}
+static void free_str(void * _, char * str) { free(str); }
 
-static void free_cons(void * _, SExprCons * cons) {
-	free(cons);
-}
+static void free_cons(void * _, SExprCons * cons) { free(cons); }
 
 static const SExprAllocatorVTable default_allocator_vtable = {
-	realloc8,
-	strdup8,
-	strdup8,
-	malloc_cons8,
-	free_str,
-	free_str,
-	free_cons
-};
+	realloc8, return_str, return_str, malloc_cons8, free_str, free_str, free_cons};
 
 SExprAllocator sexpr_default_allocator(void) {
-	return (SExprAllocator) {
-		NULL,
-		&default_allocator_vtable
-	};
+	return (SExprAllocator){NULL, &default_allocator_vtable};
 }
 
-static int  buffer_stream_peek(void * ctx) {
+static int buffer_stream_peek(void * ctx) {
 	SExprBuffer * buffer = ctx;
 	if (buffer->nleft == 0)
 		return EOF;
@@ -410,10 +392,7 @@ const static SExprStreamVTable buffer_stream_vtable = {
 };
 
 SExprStream sexpr_buffer_stream(SExprBuffer * buffer) {
-	return (SExprStream) {
-		buffer,
-		&buffer_stream_vtable
-	};
+	return (SExprStream){buffer, &buffer_stream_vtable};
 }
 
 static int FILE_stream_peek(void * ctx) {
@@ -422,9 +401,7 @@ static int FILE_stream_peek(void * ctx) {
 	return c;
 }
 
-static int FILE_stream_next(void * ctx) {
-	return fgetc(ctx);
-}
+static int FILE_stream_next(void * ctx) { return fgetc(ctx); }
 
 static const SExprStreamVTable FILE_stream_vtable = {
 	FILE_stream_peek,
@@ -432,8 +409,5 @@ static const SExprStreamVTable FILE_stream_vtable = {
 };
 
 SExprStream sexpr_FILE_stream(FILE * file) {
-	return (SExprStream) {
-		file,
-		&FILE_stream_vtable
-	};
+	return (SExprStream){file, &FILE_stream_vtable};
 }
