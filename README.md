@@ -28,10 +28,11 @@ I wanted to test how easy it was to write an s-expr parser.
 ## NAN Boxing
 - SExprs are NAN-boxed to fit into a 64-bit integer and potentially rely on pointers from ``malloc`` being 8-byte aligned.
 - This functionality relies on non-portable behavior.
-- To disable this functionality, run manually,
+- To disable this functionality, set CMake variable ``SEXPRS_DISABLE_NAN_BOXING=ON``.
     ```sh
-    cc -c sexprs.c -o <destination path> -DSEXPR_DISABLE_NAN_BOXING
-    ar crs <destination archive path> <destination path> # To build an archive
+    cmake ... -DSEXPRS_DISABLE_NAN_BOXING=ON
+    # or
+    make ... SEXPRS_DISABLE_NAN_BOXING=ON
     ```
 
 ## Using SExprs

@@ -16,7 +16,7 @@ typedef enum {
 	SEXPR_FLOAT,
 } SExprType;
 
-#ifndef SEXPR_DISABLE_NAN_BOXING
+#ifndef SEXPRS_DISABLE_NAN_BOXING
 
 typedef struct {
 	uint64_t inner;
@@ -119,7 +119,7 @@ static inline SExpr boxed_as_sexpr(void * boxed, SExprType type) {
 	return expr;
 }
 
-#endif /* SEXPR_DISABLE_NAN_BOXING */
+#endif /* SEXPRS_DISABLE_NAN_BOXING */
 
 static inline char * sexpr_as_string(SExpr expr) {
 	return (char *)sexpr_as_boxed(expr);

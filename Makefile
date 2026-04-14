@@ -1,26 +1,17 @@
-CFLAGS=-Wall -Werror -Wimplicit-fallthrough
+SEXPRS_DISABLE_NAN_BOXING ?= OFF
 
-build/sexprs.a: build/sexprs.o
-	ar crs build/sexprs.a build/sexprs.o
+all: build cmake
 
-build/sexprs.o: build/tests build/tests_disable_nan_boxing sexprs.c sexprs.h
-	mkdir -p build
-	cc -c sexprs.c -o build/sexprs.o -std=c99 ${CFLAGS} ${LDFLAGS}
+build:
+	cmake --build build
 
-build/tests: tests.c sexprs.c sexprs.h
-	mkdir -p build
-	cc tests.c sexprs.c -o build/tests -std=c99 ${CFLAGS} ${LDFLAGS}
-	./build/tests
-
-build/tests_disable_nan_boxing: tests.c sexprs.c sexprs.h
-	mkdir -p build
-	cc tests.c sexprs.c -o build/tests_disable_nan_boxing \
-		-std=c99 ${CFLAGS} ${LDFLAGS} -DSEXPR_DISABLE_NAN_BOXING
-	./build/tests_disable_nan_boxing
+cmake:
+	cmake -S . -B build -DSEXPRS_DISABLE_NAN_BOXING=${SEXPRS_DISABLE_NAN_BOXING}
 
 clean:
 	rm -r build
 
-test: build/tests
+test: build
+	ctest --test-dir build --output-on-failure
 
-.PHONY: clean, tests
+.PHONY: build, clean, test, all
