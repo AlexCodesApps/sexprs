@@ -31,58 +31,6 @@ typedef struct {
 #define SEXPR_QNAN ((uint64_t)0x7ffc000000000000)
 #define SEXPR_SIGNBIT ((uint64_t)0x8000000000000000)
 
-static inline double sexpr_as_float(SExpr expr) {
-	double out;
-	memcpy(&out, &expr.inner, sizeof(double));
-	return out;
-}
-
-static inline void * sexpr_as_boxed(SExpr expr) {
-	return (void *)((uintptr_t)expr.inner &
-					~(uintptr_t)(SEXPR_SIGNBIT | SEXPR_QNAN | 0x7));
-}
-
-static inline char * sexpr_as_string(SExpr expr) {
-	return (char *)sexpr_as_boxed(expr);
-}
-
-static inline char * sexpr_as_symbol(SExpr expr) {
-	return (char *)sexpr_as_boxed(expr);
-}
-
-static inline SExprCons * sexpr_as_cons(SExpr expr) {
-	return (SExprCons *)sexpr_as_boxed(expr);
-}
-
-static inline int sexpr_as_int(SExpr expr) { return expr.inner & 0xFFFFFFFF; }
-
-static inline SExpr float_as_sexpr(double f) {
-	SExpr expr;
-	memcpy(&expr.inner, &f, sizeof(double));
-	return expr;
-}
-
-static inline SExpr int_as_sexpr(int i) {
-	return (SExpr){(uint64_t)i | (1ULL << 49 | SEXPR_QNAN)};
-}
-
-static inline SExpr boxed_as_sexpr(void * boxed, SExprType type) {
-	return (SExpr){(uint64_t)(uintptr_t)boxed | (SEXPR_SIGNBIT | SEXPR_QNAN) |
-				   type};
-}
-
-static inline SExpr string_as_sexpr(char * str) {
-	return boxed_as_sexpr(str, SEXPR_STRING);
-}
-
-static inline SExpr symbol_as_sexpr(char * sym) {
-	return boxed_as_sexpr(sym, SEXPR_SYMBOL);
-}
-
-static inline SExpr cons_as_sexpr(SExprCons * cons) {
-	return boxed_as_sexpr(cons, SEXPR_CONS);
-}
-
 static inline SExprType sexpr_type(SExpr expr) {
 	if ((expr.inner & SEXPR_QNAN) != SEXPR_QNAN) {
 		return SEXPR_FLOAT;
@@ -96,6 +44,34 @@ static inline SExprType sexpr_type(SExpr expr) {
 	return SEXPR_NIL;
 }
 
+
+static inline double sexpr_as_float(SExpr expr) {
+	double out;
+	memcpy(&out, &expr.inner, sizeof(double));
+	return out;
+}
+
+static inline void * sexpr_as_boxed(SExpr expr) {
+	return (void *)((uintptr_t)expr.inner &
+					~(uintptr_t)(SEXPR_SIGNBIT | SEXPR_QNAN | 0x7));
+}
+
+static inline SExpr boxed_as_sexpr(void * boxed, SExprType type) {
+	return (SExpr){(uint64_t)(uintptr_t)boxed | (SEXPR_SIGNBIT | SEXPR_QNAN) |
+					type};
+}
+
+static inline int sexpr_as_int(SExpr expr) { return expr.inner & 0xFFFFFFFF; }
+
+static inline SExpr float_as_sexpr(double f) {
+	SExpr expr;
+	memcpy(&expr.inner, &f, sizeof(double));
+	return expr;
+}
+
+static inline SExpr int_as_sexpr(int i) {
+	return (SExpr){(uint64_t)i | (1ULL << 49 | SEXPR_QNAN)};
+}
 #else
 
 typedef struct {
@@ -114,17 +90,11 @@ typedef struct {
 
 #define NIL_SEXPR ((SExpr){SEXPR_NIL})
 
+static inline SExprType sexpr_type(SExpr expr) { return expr.type; }
+
 static inline double sexpr_as_float(SExpr expr) { return expr.as.f; }
 
 static inline void * sexpr_as_boxed(SExpr expr) { return expr.as.b; }
-
-static inline char * sexpr_as_string(SExpr expr) { return (char *)expr.as.b; }
-
-static inline char * sexpr_as_symbol(SExpr expr) { return (char *)expr.as.b; }
-
-static inline SExprCons * sexpr_as_cons(SExpr expr) {
-	return (SExprCons *)expr.as.b;
-}
 
 static inline int sexpr_as_int(SExpr expr) { return expr.as.i; }
 
@@ -149,6 +119,20 @@ static inline SExpr boxed_as_sexpr(void * boxed, SExprType type) {
 	return expr;
 }
 
+#endif /* SEXPR_DISABLE_NAN_BOXING */
+
+static inline char * sexpr_as_string(SExpr expr) {
+	return (char *)sexpr_as_boxed(expr);
+}
+
+static inline char * sexpr_as_symbol(SExpr expr) {
+	return (char *)sexpr_as_boxed(expr);
+}
+
+static inline SExprCons * sexpr_as_cons(SExpr expr) {
+	return (SExprCons *)sexpr_as_boxed(expr);
+}
+
 static inline SExpr string_as_sexpr(char * str) {
 	return boxed_as_sexpr(str, SEXPR_STRING);
 }
@@ -160,10 +144,6 @@ static inline SExpr symbol_as_sexpr(char * sym) {
 static inline SExpr cons_as_sexpr(SExprCons * cons) {
 	return boxed_as_sexpr(cons, SEXPR_CONS);
 }
-
-static inline SExprType sexpr_type(SExpr expr) { return expr.type; }
-
-#endif /* SEXPR_DISABLE_NAN_BOXING */
 
 typedef struct {
 	char * (*realloc_buffer)(void * ctx, char * buffer, size_t oldsize,
