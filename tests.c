@@ -33,8 +33,10 @@ void test_tag(void) {
 }
 
 void test_no_crash(void) {
-	const char * test = "(+ 12 (123.0* 4.0 \"5 fjl \nf\"))";
+	const char * test = "(+ 12 '(123.0* 4.0 \"5 fjl \nf\"))";
 	SExprParseOptions opts = {0};
+	_Alignas(8) char quote[] = "quote";
+	opts.enable_quote_sym = quote;
 	SExprBuffer buf;
 	buf.ptr = test;
 	buf.nleft = strlen(test);
@@ -57,6 +59,13 @@ void test_no_crash(void) {
 	cons = sexpr_as_cons(cons->car);
 	assert(sexpr_type(cons->car) == SEXPR_SYMBOL);
 	assert(sexpr_type(cons->cdr) == SEXPR_CONS);
+	assert(strcmp(sexpr_as_symbol(cons->car), "quote") == 0);
+	cons = sexpr_as_cons(cons->cdr);
+	assert(sexpr_type(cons->car) == SEXPR_CONS);
+	assert(sexpr_type(cons->cdr) == SEXPR_NIL);
+	cons = sexpr_as_cons(cons->car);
+	assert(sexpr_type(cons->car) == SEXPR_SYMBOL);
+	assert(sexpr_type(cons->cdr) == SEXPR_CONS);
 	assert(strcmp(sexpr_as_symbol(cons->car), "123.0*") == 0);
 	cons = sexpr_as_cons(cons->cdr);
 	assert(sexpr_type(cons->car) == SEXPR_FLOAT);
@@ -66,7 +75,7 @@ void test_no_crash(void) {
 	assert(sexpr_type(cons->car) == SEXPR_STRING);
 	assert(sexpr_type(cons->cdr) == SEXPR_NIL);
 	assert(strcmp(sexpr_as_string(cons->car), "5 fjl \nf") == 0);
-	sexpr_free(expr, opts.allocator);
+	sexpr_free(expr, &opts);
 }
 
 int main(void) {

@@ -188,6 +188,7 @@ typedef struct SExprParseOptions {
 	SExprStream stream;
 	SExprParseResult (*lex_str)(struct SExprParseOptions * opts, char ** out);
 	const char * nil_keyword;
+	char * enable_quote_sym;
 	size_t nest_limit;
 } SExprParseOptions;
 
@@ -203,6 +204,6 @@ SExprStream sexpr_FILE_stream(FILE * file);
 /* PRE: LC_NUMERIC must be set to "C" or "POSIX" */
 SExprParseResult sexpr_parse(SExprParseOptions * opts, SExpr * out);
 
-void sexpr_free(SExpr expr, SExprAllocator alloc);
+void sexpr_free(SExpr expr, SExprParseOptions * opts);
 
 #endif /* SEXPRS_H */

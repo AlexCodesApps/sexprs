@@ -22,7 +22,7 @@ I wanted to test how easy it was to write an s-expr parser.
     SExprParseResult r = sexpr_parse(&opts, &expr);
     assert(r == SEXPR_PARSE_OK);
     /* ... */
-    sexpr_free(expr, opts.allocator);
+    sexpr_free(expr, &opts);
 ```
 
 ## NAN Boxing
@@ -84,6 +84,20 @@ typedef struct SExprParseOptions {
         it is excluded during parsing.
     */
 	const char * nil_keyword;
+    /* Enables quoting by converting quoted sexprs to a call
+        to the form.
+```
+```lisp
+        'expr
+        ; becomes
+        `(,(symbol->string enable_quote_sym) expr)
+```
+```
+        . The symbol is not deallocated by 'sexpr_free', it may be static.
+        . Do not deallocate until after freeing the S-Expr.
+        . When NAN boxing is enabled, MUST be aligned to 64 bits
+    */
+	char * enable_quote_sym;
     /* Max depth limit for SExprs. If unspecified or set to 0,
         it is excluded during parsing.
 	size_t nest_limit;
@@ -92,6 +106,9 @@ typedef struct SExprParseOptions {
 
 SExprParseResult sexpr_parse(SExprParseOptions * opts, SExpr * out);
 ```
+
+### Allocator
+. With NAN boxing, all allocations MUST be aligned to 64 bits.
 
 ### Stream
 No asynchronous support, but somewhat self explanatory.
@@ -132,9 +149,6 @@ typedef enum {
 ```
 
 ### Cleanup
-If no allocator was specified to ``sexpr_parse``,
-the default allocator will be written into the opts pointer
-for use with this function.
 ```C
-void sexpr_free(SExpr expr, SExprAllocator alloc);
+void sexpr_free(SExpr expr, SExprOpts * opts);
 ```

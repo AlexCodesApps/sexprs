@@ -18,8 +18,9 @@ typedef enum {
 	T_SYM,
 	T_STR,
 	T_NIL,
+	T_APOSTROPHE,
 	T_EOF,
-	T_ERR,
+	T_ERR
 } TokenType;
 
 typedef struct {
@@ -196,6 +197,10 @@ static Token lex_token(SExprParseOptions * opts) {
 		next(s);
 		return token(T_RPAREN);
 	}
+	if (c == '\'' && opts->enable_quote_sym) {
+		next(s);
+		return token(T_APOSTROPHE);
+	}
 	if (c == '"') {
 		char * s;
 		SExprParseResult r = opts->lex_str(opts, &s);
@@ -251,7 +256,8 @@ static Token lex_token(SExprParseOptions * opts) {
 	return t;
 }
 
-void sexpr_free(SExpr expr, SExprAllocator alloc) {
+void sexpr_free(SExpr expr, SExprParseOptions * opts) {
+	SExprAllocator alloc = opts->allocator;
 	switch (sexpr_type(expr)) {
 	case SEXPR_NIL:
 	case SEXPR_INT:
@@ -262,14 +268,17 @@ void sexpr_free(SExpr expr, SExprAllocator alloc) {
 		break;
 	case SEXPR_CONS: {
 		SExprCons * cons = sexpr_as_cons(expr);
-		sexpr_free(cons->car, alloc);
-		sexpr_free(cons->cdr, alloc);
+		sexpr_free(cons->car, opts);
+		sexpr_free(cons->cdr, opts);
 		alloc.vtable->free_cons(alloc.ctx, sexpr_as_cons(expr));
 		break;
 	}
-	case SEXPR_SYMBOL:
-		alloc.vtable->free_symbol(alloc.ctx, sexpr_as_symbol(expr));
+	case SEXPR_SYMBOL: {
+		char * sym = sexpr_as_symbol(expr);
+		if (sym != opts->enable_quote_sym)
+			alloc.vtable->free_symbol(alloc.ctx, sym);
 		break;
+	}
 	}
 }
 
@@ -290,16 +299,39 @@ SExprParseResult parse_rest_of_list(SExprParseOptions * opts, size_t level,
 		return r;
 	r = parse_rest_of_list(opts, level, &cons.cdr);
 	if (r != SEXPR_PARSE_OK) {
-		sexpr_free(cons.car, alloc);
+		sexpr_free(cons.car, opts);
 		return r;
 	}
 	SExprCons * consp = alloc.vtable->allocate_cons(alloc.ctx, cons);
 	if (!consp) {
-		sexpr_free(cons.car, alloc);
-		sexpr_free(cons.cdr, alloc);
+		sexpr_free(cons.car, opts);
+		sexpr_free(cons.cdr, opts);
 		return SEXPR_PARSE_OOM;
 	}
 	*out = cons_as_sexpr(consp);
+	return SEXPR_PARSE_OK;
+}
+
+SExprParseResult parse_quote_sexpr(SExprParseOptions * opts, size_t level, SExpr * out) {
+	SExpr expr;
+	SExprParseResult r = parse_sexpr(opts, level, lex_token(opts), &expr);
+	if (r != SEXPR_PARSE_OK)
+		return r;
+	SExprAllocator alloc = opts->allocator;
+	SExprCons cons = { expr, NIL_SEXPR };
+	SExprCons * tail = alloc.vtable->allocate_cons(alloc.ctx, cons);
+	if (!tail) {
+		sexpr_free(expr, opts);
+		return SEXPR_PARSE_OOM;
+	}
+	cons = (SExprCons){ symbol_as_sexpr(opts->enable_quote_sym), cons_as_sexpr(tail) };
+	SExprCons * head = alloc.vtable->allocate_cons(alloc.ctx, cons);
+	if (!head) {
+		alloc.vtable->free_cons(alloc.ctx, tail);
+		sexpr_free(expr, opts);
+		return SEXPR_PARSE_OOM;
+	}
+	*out = cons_as_sexpr(head);
 	return SEXPR_PARSE_OK;
 }
 
@@ -327,6 +359,8 @@ SExprParseResult parse_sexpr(SExprParseOptions * opts, size_t level, Token t,
 	case T_NIL:
 		*out = NIL_SEXPR;
 		break;
+	case T_APOSTROPHE:
+		return parse_quote_sexpr(opts, level + 1, out);
 	case T_EOF:
 		return SEXPR_PARSE_UNEXPECTED_EOF;
 	case T_ERR:
