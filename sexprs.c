@@ -18,7 +18,8 @@ static int stream_peek(StreamBuffer * buffer, SExprStream stream) {
 	if (buffer->cursor != buffer->end) {
 		return *buffer->cursor;
 	}
-	int nbytes = stream.vtable->read(stream.ctx, buffer->inner, STREAM_BUFFER_SIZE);
+	int nbytes =
+		stream.vtable->read(stream.ctx, buffer->inner, STREAM_BUFFER_SIZE);
 	if (nbytes == 0)
 		return EOF;
 	buffer->cursor = buffer->inner;
@@ -30,7 +31,8 @@ static int stream_next(StreamBuffer * buffer, SExprStream stream) {
 	if (buffer->cursor != buffer->end) {
 		return *(buffer->cursor++);
 	}
-	int nbytes = stream.vtable->read(stream.ctx, buffer->inner, STREAM_BUFFER_SIZE);
+	int nbytes =
+		stream.vtable->read(stream.ctx, buffer->inner, STREAM_BUFFER_SIZE);
 	if (nbytes == 0)
 		return EOF;
 	buffer->cursor = buffer->inner;
@@ -100,7 +102,8 @@ static void free_buffer(SExprAllocator alloc, void * buf, size_t old) {
 	realloc_buffer(alloc, buf, old, 0);
 }
 
-static SExprParseResult lex_str(StreamBuffer * b, SExprParseOptions * opts, char ** out) {
+static SExprParseResult lex_str(StreamBuffer * b, SExprParseOptions * opts,
+								char ** out) {
 	SExprStream stream = opts->stream;
 	SExprAllocator alloc = opts->allocator;
 	size_t size = 0;
@@ -180,7 +183,8 @@ int xis_not_part_of_sym(char c) {
 	}
 }
 
-static SExprParseResult lex_sym_or_number(StreamBuffer * b, SExprParseOptions * opts, char ** out,
+static SExprParseResult lex_sym_or_number(StreamBuffer * b,
+										  SExprParseOptions * opts, char ** out,
 										  size_t * out_size, size_t * out_cap) {
 	SExprStream s = opts->stream;
 	SExprAllocator alloc = opts->allocator;
@@ -310,10 +314,11 @@ void sexpr_free(SExpr expr, SExprParseOptions * opts) {
 	}
 }
 
-SExprParseResult parse_sexpr(StreamBuffer * buffer, SExprParseOptions * opts, size_t level, Token t,
-							 SExpr * out);
+SExprParseResult parse_sexpr(StreamBuffer * buffer, SExprParseOptions * opts,
+							 size_t level, Token t, SExpr * out);
 
-SExprParseResult parse_rest_of_list(StreamBuffer * buffer, SExprParseOptions * opts, size_t level,
+SExprParseResult parse_rest_of_list(StreamBuffer * buffer,
+									SExprParseOptions * opts, size_t level,
 									SExpr * out) {
 	SExprAllocator alloc = opts->allocator;
 	Token t = lex_token(buffer, opts);
@@ -340,19 +345,23 @@ SExprParseResult parse_rest_of_list(StreamBuffer * buffer, SExprParseOptions * o
 	return SEXPR_PARSE_OK;
 }
 
-SExprParseResult parse_quote_sexpr(StreamBuffer * buffer, SExprParseOptions * opts, size_t level, SExpr * out) {
+SExprParseResult parse_quote_sexpr(StreamBuffer * buffer,
+								   SExprParseOptions * opts, size_t level,
+								   SExpr * out) {
 	SExpr expr;
-	SExprParseResult r = parse_sexpr(buffer, opts, level, lex_token(buffer, opts), &expr);
+	SExprParseResult r =
+		parse_sexpr(buffer, opts, level, lex_token(buffer, opts), &expr);
 	if (r != SEXPR_PARSE_OK)
 		return r;
 	SExprAllocator alloc = opts->allocator;
-	SExprCons cons = { expr, NIL_SEXPR };
+	SExprCons cons = {expr, NIL_SEXPR};
 	SExprCons * tail = alloc.vtable->allocate_cons(alloc.ctx, cons);
 	if (!tail) {
 		sexpr_free(expr, opts);
 		return SEXPR_PARSE_OOM;
 	}
-	cons = (SExprCons){ symbol_as_sexpr(opts->enable_quote_sym), cons_as_sexpr(tail) };
+	cons = (SExprCons){symbol_as_sexpr(opts->enable_quote_sym),
+					   cons_as_sexpr(tail)};
 	SExprCons * head = alloc.vtable->allocate_cons(alloc.ctx, cons);
 	if (!head) {
 		alloc.vtable->free_cons(alloc.ctx, tail);
@@ -363,8 +372,8 @@ SExprParseResult parse_quote_sexpr(StreamBuffer * buffer, SExprParseOptions * op
 	return SEXPR_PARSE_OK;
 }
 
-SExprParseResult parse_sexpr(StreamBuffer * buffer, SExprParseOptions * opts, size_t level, Token t,
-							 SExpr * out) {
+SExprParseResult parse_sexpr(StreamBuffer * buffer, SExprParseOptions * opts,
+							 size_t level, Token t, SExpr * out) {
 	if (opts->nest_limit && level >= opts->nest_limit)
 		return SEXPR_PARSE_NEST_LIMIT_EXCEEDED;
 	switch (t.type) {
@@ -427,7 +436,8 @@ static void free_str(void * _, char * str) { free(str); }
 static void free_cons(void * _, SExprCons * cons) { free(cons); }
 
 static const SExprAllocatorVTable default_allocator_vtable = {
-	realloc8, return_str, return_str, malloc_cons8, free_str, free_str, free_cons};
+	realloc8, return_str, return_str, malloc_cons8,
+	free_str, free_str,	  free_cons};
 
 SExprAllocator sexpr_default_allocator(void) {
 	return (SExprAllocator){NULL, &default_allocator_vtable};

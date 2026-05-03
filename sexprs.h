@@ -44,7 +44,6 @@ static inline SExprType sexpr_type(SExpr expr) {
 	return SEXPR_NIL;
 }
 
-
 static inline double sexpr_as_float(SExpr expr) {
 	double out;
 	memcpy(&out, &expr.inner, sizeof(double));
@@ -58,7 +57,7 @@ static inline void * sexpr_as_boxed(SExpr expr) {
 
 static inline SExpr boxed_as_sexpr(void * boxed, SExprType type) {
 	return (SExpr){(uint64_t)(uintptr_t)boxed | (SEXPR_SIGNBIT | SEXPR_QNAN) |
-					type};
+				   type};
 }
 
 static inline int sexpr_as_int(SExpr expr) { return expr.inner & 0xFFFFFFFF; }
