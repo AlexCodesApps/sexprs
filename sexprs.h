@@ -163,8 +163,7 @@ typedef struct {
 } SExprAllocator;
 
 typedef struct {
-	int (*peek)(void * ctx);
-	int (*next)(void * ctx);
+	int (*read)(void * ctx, void * data, int size);
 } SExprStreamVTable;
 
 typedef struct {
@@ -186,7 +185,6 @@ typedef enum {
 typedef struct SExprParseOptions {
 	SExprAllocator allocator;
 	SExprStream stream;
-	SExprParseResult (*lex_str)(struct SExprParseOptions * opts, char ** out);
 	const char * nil_keyword;
 	char * enable_quote_sym;
 	size_t nest_limit;

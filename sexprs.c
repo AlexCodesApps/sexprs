@@ -6,9 +6,37 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-static int peek(SExprStream stream) { return stream.vtable->peek(stream.ctx); }
+#define STREAM_BUFFER_SIZE (8192)
 
-static int next(SExprStream stream) { return stream.vtable->next(stream.ctx); }
+typedef struct {
+	char * cursor;
+	char * end;
+	char inner[STREAM_BUFFER_SIZE];
+} StreamBuffer;
+
+static int stream_peek(StreamBuffer * buffer, SExprStream stream) {
+	if (buffer->cursor != buffer->end) {
+		return *buffer->cursor;
+	}
+	int nbytes = stream.vtable->read(stream.ctx, buffer->inner, STREAM_BUFFER_SIZE);
+	if (nbytes == 0)
+		return EOF;
+	buffer->cursor = buffer->inner;
+	buffer->end = buffer->inner + nbytes;
+	return *buffer->cursor;
+}
+
+static int stream_next(StreamBuffer * buffer, SExprStream stream) {
+	if (buffer->cursor != buffer->end) {
+		return *(buffer->cursor++);
+	}
+	int nbytes = stream.vtable->read(stream.ctx, buffer->inner, STREAM_BUFFER_SIZE);
+	if (nbytes == 0)
+		return EOF;
+	buffer->cursor = buffer->inner;
+	buffer->end = buffer->inner + nbytes;
+	return *(buffer->cursor++);
+}
 
 typedef enum {
 	T_LPAREN,
@@ -42,19 +70,19 @@ static Token token_err(SExprParseResult r) {
 	return t;
 }
 
-static int lex_ws(SExprStream s) {
+static int lex_ws(StreamBuffer * b, SExprStream s) {
 	int c;
-	while ((c = peek(s)) != EOF) {
+	while ((c = stream_peek(b, s)) != EOF) {
 		switch (c) {
 		case ';':
-			while ((c = peek(s)) != EOF && c != '\n')
-				next(s);
+			while ((c = stream_peek(b, s)) != EOF && c != '\n')
+				stream_next(b, s);
 			continue;
 		case ' ':
 		case '\n':
 		case '\r':
 		case '\t':
-			next(s);
+			stream_next(b, s);
 			continue;
 		default:
 			return c;
@@ -72,18 +100,18 @@ static void free_buffer(SExprAllocator alloc, void * buf, size_t old) {
 	realloc_buffer(alloc, buf, old, 0);
 }
 
-static SExprParseResult lex_str(SExprParseOptions * opts, char ** out) {
+static SExprParseResult lex_str(StreamBuffer * b, SExprParseOptions * opts, char ** out) {
 	SExprStream stream = opts->stream;
 	SExprAllocator alloc = opts->allocator;
 	size_t size = 0;
 	size_t cap = 4;
 	char * buffer = realloc_buffer(alloc, NULL, 0, cap);
-	next(stream);
+	stream_next(b, stream);
 	char c;
-	while ((c = peek(stream)) != '"' && c != EOF) {
-		next(stream);
+	while ((c = stream_peek(b, stream)) != '"' && c != EOF) {
+		stream_next(b, stream);
 		if (c == '\\') {
-			switch (peek(stream)) {
+			switch (stream_peek(b, stream)) {
 			case 'n':
 				c = '\n';
 				break;
@@ -97,7 +125,7 @@ static SExprParseResult lex_str(SExprParseOptions * opts, char ** out) {
 				realloc_buffer(alloc, buffer, cap, 0);
 				return SEXPR_PARSE_UNEXPECTED_CHAR;
 			}
-			next(stream);
+			stream_next(b, stream);
 		}
 		if (size == cap - 1) {
 			size_t ncap = cap * 2;
@@ -115,7 +143,7 @@ static SExprParseResult lex_str(SExprParseOptions * opts, char ** out) {
 		realloc_buffer(alloc, buffer, cap, 0);
 		return SEXPR_UNTERM_STRING;
 	}
-	next(stream);
+	stream_next(b, stream);
 	buffer[size] = '\0';
 	char * str = alloc.vtable->buffer_to_string(alloc.ctx, buffer);
 	if (!str) {
@@ -152,7 +180,7 @@ int xis_not_part_of_sym(char c) {
 	}
 }
 
-static SExprParseResult lex_sym_or_number(SExprParseOptions * opts, char ** out,
+static SExprParseResult lex_sym_or_number(StreamBuffer * b, SExprParseOptions * opts, char ** out,
 										  size_t * out_size, size_t * out_cap) {
 	SExprStream s = opts->stream;
 	SExprAllocator alloc = opts->allocator;
@@ -172,8 +200,8 @@ static SExprParseResult lex_sym_or_number(SExprParseOptions * opts, char ** out,
 			cap = new_cap;
 			buff = nbuff;
 		}
-		buff[size++] = next(s);
-	} while (!xis_not_part_of_sym(peek(s)));
+		buff[size++] = stream_next(b, s);
+	} while (!xis_not_part_of_sym(stream_peek(b, s)));
 	buff[size] = '\0';
 	*out = buff;
 	*out_size = size;
@@ -181,29 +209,29 @@ static SExprParseResult lex_sym_or_number(SExprParseOptions * opts, char ** out,
 	return SEXPR_PARSE_OK;
 }
 
-static Token lex_token(SExprParseOptions * opts) {
+static Token lex_token(StreamBuffer * b, SExprParseOptions * opts) {
 	SExprStream s = opts->stream;
 	SExprAllocator alloc = opts->allocator;
-	int c = lex_ws(s);
+	int c = lex_ws(b, s);
 	if (c == EOF) {
-		next(s);
+		stream_next(b, s);
 		return token(T_EOF);
 	}
 	if (c == '(') {
-		next(s);
+		stream_next(b, s);
 		return token(T_LPAREN);
 	}
 	if (c == ')') {
-		next(s);
+		stream_next(b, s);
 		return token(T_RPAREN);
 	}
 	if (c == '\'' && opts->enable_quote_sym) {
-		next(s);
+		stream_next(b, s);
 		return token(T_APOSTROPHE);
 	}
 	if (c == '"') {
 		char * s;
-		SExprParseResult r = opts->lex_str(opts, &s);
+		SExprParseResult r = lex_str(b, opts, &s);
 		if (r != SEXPR_PARSE_OK)
 			return token_err(r);
 		Token t = token(T_STR);
@@ -213,7 +241,7 @@ static Token lex_token(SExprParseOptions * opts) {
 	char * blob;
 	size_t bsize;
 	size_t bcap;
-	SExprParseResult r = lex_sym_or_number(opts, &blob, &bsize, &bcap);
+	SExprParseResult r = lex_sym_or_number(b, opts, &blob, &bsize, &bcap);
 	if (r != SEXPR_PARSE_OK)
 		return token_err(r);
 	if (opts->nil_keyword && strcmp(opts->nil_keyword, blob) == 0) {
@@ -282,22 +310,22 @@ void sexpr_free(SExpr expr, SExprParseOptions * opts) {
 	}
 }
 
-SExprParseResult parse_sexpr(SExprParseOptions * opts, size_t level, Token t,
+SExprParseResult parse_sexpr(StreamBuffer * buffer, SExprParseOptions * opts, size_t level, Token t,
 							 SExpr * out);
 
-SExprParseResult parse_rest_of_list(SExprParseOptions * opts, size_t level,
+SExprParseResult parse_rest_of_list(StreamBuffer * buffer, SExprParseOptions * opts, size_t level,
 									SExpr * out) {
 	SExprAllocator alloc = opts->allocator;
-	Token t = lex_token(opts);
+	Token t = lex_token(buffer, opts);
 	if (t.type == T_RPAREN) {
 		*out = NIL_SEXPR;
 		return SEXPR_PARSE_OK;
 	}
 	SExprCons cons;
-	SExprParseResult r = parse_sexpr(opts, level, t, &cons.car);
+	SExprParseResult r = parse_sexpr(buffer, opts, level, t, &cons.car);
 	if (r != SEXPR_PARSE_OK)
 		return r;
-	r = parse_rest_of_list(opts, level, &cons.cdr);
+	r = parse_rest_of_list(buffer, opts, level, &cons.cdr);
 	if (r != SEXPR_PARSE_OK) {
 		sexpr_free(cons.car, opts);
 		return r;
@@ -312,9 +340,9 @@ SExprParseResult parse_rest_of_list(SExprParseOptions * opts, size_t level,
 	return SEXPR_PARSE_OK;
 }
 
-SExprParseResult parse_quote_sexpr(SExprParseOptions * opts, size_t level, SExpr * out) {
+SExprParseResult parse_quote_sexpr(StreamBuffer * buffer, SExprParseOptions * opts, size_t level, SExpr * out) {
 	SExpr expr;
-	SExprParseResult r = parse_sexpr(opts, level, lex_token(opts), &expr);
+	SExprParseResult r = parse_sexpr(buffer, opts, level, lex_token(buffer, opts), &expr);
 	if (r != SEXPR_PARSE_OK)
 		return r;
 	SExprAllocator alloc = opts->allocator;
@@ -335,13 +363,13 @@ SExprParseResult parse_quote_sexpr(SExprParseOptions * opts, size_t level, SExpr
 	return SEXPR_PARSE_OK;
 }
 
-SExprParseResult parse_sexpr(SExprParseOptions * opts, size_t level, Token t,
+SExprParseResult parse_sexpr(StreamBuffer * buffer, SExprParseOptions * opts, size_t level, Token t,
 							 SExpr * out) {
 	if (opts->nest_limit && level >= opts->nest_limit)
 		return SEXPR_PARSE_NEST_LIMIT_EXCEEDED;
 	switch (t.type) {
 	case T_LPAREN:
-		return parse_rest_of_list(opts, level + 1, out);
+		return parse_rest_of_list(buffer, opts, level + 1, out);
 	case T_RPAREN:
 		return SEXPR_PARSE_UNEXPECTED_TOKEN;
 	case T_INT:
@@ -360,7 +388,7 @@ SExprParseResult parse_sexpr(SExprParseOptions * opts, size_t level, Token t,
 		*out = NIL_SEXPR;
 		break;
 	case T_APOSTROPHE:
-		return parse_quote_sexpr(opts, level + 1, out);
+		return parse_quote_sexpr(buffer, opts, level + 1, out);
 	case T_EOF:
 		return SEXPR_PARSE_UNEXPECTED_EOF;
 	case T_ERR:
@@ -374,9 +402,10 @@ SExprParseResult sexpr_parse(SExprParseOptions * opts, SExpr * out) {
 		opts->allocator = sexpr_default_allocator();
 	if (opts->stream.vtable == NULL)
 		opts->stream = sexpr_FILE_stream(stdout);
-	if (opts->lex_str == NULL)
-		opts->lex_str = lex_str;
-	return parse_sexpr(opts, 0, lex_token(opts), out);
+	StreamBuffer buf;
+	buf.cursor = buf.inner;
+	buf.end = buf.inner;
+	return parse_sexpr(&buf, opts, 0, lex_token(&buf, opts), out);
 }
 
 static char * realloc8(void * _, char * in, size_t _2, size_t size) {
@@ -404,42 +433,31 @@ SExprAllocator sexpr_default_allocator(void) {
 	return (SExprAllocator){NULL, &default_allocator_vtable};
 }
 
-static int buffer_stream_peek(void * ctx) {
+static int buffer_stream_read(void * ctx, void * data, int size) {
 	SExprBuffer * buffer = ctx;
 	if (buffer->nleft == 0)
-		return EOF;
-	return *buffer->ptr;
-}
-
-static int buffer_stream_next(void * ctx) {
-	SExprBuffer * buffer = ctx;
-	if (buffer->nleft == 0)
-		return EOF;
-	char c = *buffer->ptr++;
-	--buffer->nleft;
-	return c;
+		return 0;
+	ptrdiff_t towrite = buffer->nleft < size ? buffer->nleft : size;
+	memcpy(data, buffer->ptr, towrite);
+	buffer->nleft -= towrite;
+	buffer->ptr += towrite;
+	return towrite;
 }
 
 const static SExprStreamVTable buffer_stream_vtable = {
-	buffer_stream_peek,
-	buffer_stream_next,
+	buffer_stream_read,
 };
 
 SExprStream sexpr_buffer_stream(SExprBuffer * buffer) {
 	return (SExprStream){buffer, &buffer_stream_vtable};
 }
 
-static int FILE_stream_peek(void * ctx) {
-	char c = fgetc(ctx);
-	ungetc(c, ctx);
-	return c;
+static int FILE_stream_read(void * ctx, void * data, int size) {
+	return fread(data, 1, size, ctx);
 }
 
-static int FILE_stream_next(void * ctx) { return fgetc(ctx); }
-
 static const SExprStreamVTable FILE_stream_vtable = {
-	FILE_stream_peek,
-	FILE_stream_next,
+	FILE_stream_read,
 };
 
 SExprStream sexpr_FILE_stream(FILE * file) {

@@ -5,8 +5,7 @@ I wanted to test how easy it was to write an s-expr parser.
 
 ## What does it do?
 - It parses a limited subset of s-exprs that would work across different lisps.
-- Currently lacks builtin multi-line strings, but does support
-    support customizing the string lexer.
+- Currently lacks builtin multi-line strings.
 - Symbols are anything that don't otherwise make sense
 
 ## Basic Usage
@@ -77,10 +76,6 @@ typedef struct SExprParseOptions {
         the field is set to sexpr_FILE_stream(stdout)
     */
 	SExprStream stream;
-    /* String lexer. If unspecified,
-        the field is set to an internal builtin.
-    */
-	SExprParseResult (*lex_str)(struct SExprParseOptions * opts, char ** out);
     /* Nil keyword alias for '(). If unspecified or set to NULL,
         it is excluded during parsing.
     */
@@ -120,8 +115,7 @@ typedef struct {
 } SExprStream;
 
 typedef struct {
-	int (*peek)(void * ctx);
-	int (*next)(void * ctx);
+	int (*read)(void * ctx, void * data, int size);
 } SExprStreamVTable;
 
 /* For string input */
